@@ -1,103 +1,66 @@
-# ☀️ Paneles Solares CR — Solver LP
+# Tarea 3 - Paneles Solares
 
-**II-1122 · Modelos de Optimización Industrial · UCR Alajuela · Tarea 3**
+II-1122 | Modelos de Optimizacion Industrial | UCR Alajuela
 
-App interactiva para optimizar el mix de producción semanal de paneles solares usando Programación Lineal (PuLP + Streamlit).
+## Descripcion del caso
 
----
+Se compararon 3 facturas de electricidad residencial de CNFL correspondientes a casas en diferentes provincias de Costa Rica. El objetivo es determinar cuantos paneles solares instalar en cada casa para maximizar el ahorro mensual en electricidad, dado un presupuesto limitado.
 
-## Caso de negocio
+## Datos de las 3 casas
 
-**Empresa:** Paneles Solares CR S.A., fabricante costarricense de paneles fotovoltaicos.
+| | Casa 1 - Heredia | Casa 2 - San Jose | Casa 3 - Alajuela |
+|---|---|---|---|
+| Consumo mensual | 86 kWh | 152 kWh | 218 kWh |
+| Factura mensual | 5,465 colones | 9,240 colones | 13,180 colones |
+| Horas sol/dia | 3.5 h | 4.0 h | 4.5 h |
+| Generacion por panel | 31.5 kWh/mes | 36.0 kWh/mes | 40.5 kWh/mes |
+| Costo por panel instalado | 165,000 colones | 150,000 colones | 145,000 colones |
+| Max paneles posibles | 2 | 4 | 5 |
 
-**Decisión:** ¿Cuántas unidades de cada tipo de panel producir por semana para maximizar el margen de contribución?
+Tarifa CNFL residencial usada: 58.16 colones/kWh
 
-**Tipos de panel:**
+## Modelo de programacion lineal
 
-| Tipo | Potencia | Margen base (₡ miles) |
-|------|----------|----------------------|
-| Residencial | 100 W | 85 |
-| Comercial | 300 W | 220 |
-| Industrial | 500 W | 380 |
+**Variables de decision:**
+- x1 = numero de paneles instalados en Casa 1 (Heredia)
+- x2 = numero de paneles instalados en Casa 2 (San Jose)
+- x3 = numero de paneles instalados en Casa 3 (Alajuela)
 
----
+**Funcion objetivo:**
 
-## Modelo de Programación Lineal
+Maximizar Z = 1832*x1 + 2094*x2 + 2355*x3
 
-### Variables de decisión
+(colones ahorrados en electricidad por mes)
 
-- **x₁** = unidades de Panel Residencial (100 W) producidas por semana
-- **x₂** = unidades de Panel Comercial (300 W) producidas por semana
-- **x₃** = unidades de Panel Industrial (500 W) producidas por semana
+**Restricciones:**
 
-### Función objetivo
+- Presupuesto: 165000*x1 + 150000*x2 + 145000*x3 <= 1,500,000
+- Limite Casa 1: x1 <= 2
+- Limite Casa 2: x2 <= 4
+- Limite Casa 3: x3 <= 5
+- No negatividad: x1, x2, x3 >= 0
 
-$$\max Z = 85x_1 + 220x_2 + 380x_3 \quad [\text{₡ miles / semana}]$$
+## Solucion optima (presupuesto base de 1,500,000 colones)
 
-### Restricciones
+| Variable | Valor |
+|---|---|
+| x1 (Casa 1 - Heredia) | 1 panel |
+| x2 (Casa 2 - San Jose) | 4 paneles |
+| x3 (Casa 3 - Alajuela) | 5 paneles |
+| Z* | 21,983 colones/mes de ahorro |
+| Inversion total | 1,490,000 colones |
+| Tiempo de recuperacion | 67.8 meses (5.7 anos) |
 
-| Recurso | Restricción | Límite base |
-|---------|-------------|-------------|
-| Silicio (kg) | 1.2x₁ + 3.0x₂ + 5.5x₃ ≤ cap | 480 kg |
-| Ensamble (hr) | 2.5x₁ + 5.0x₂ + 9.0x₃ ≤ cap | 600 hr |
-| Control de calidad (hr) | 0.5x₁ + 1.5x₂ + 2.5x₃ ≤ cap | 180 hr |
-| Demanda residencial | x₁ ≤ dem | 150 und |
-| Demanda comercial | x₂ ≤ dem | 80 und |
-| Demanda industrial | x₃ ≤ dem | 30 und |
-| No negatividad | x₁, x₂, x₃ ≥ 0 | — |
+## Archivos del proyecto
 
----
+- `app.py` - interfaz Streamlit
+- `modelo.py` - modelo LP con PuLP
+- `requirements.txt` - librerias necesarias
+- `README.md` - este archivo
 
-## Solución óptima (parámetros base)
-
-| Variable | Valor | Descripción |
-|----------|-------|-------------|
-| x₁* | 96 und | Panel Residencial |
-| x₂* | 38 und | Panel Comercial |
-| x₃* | 30 und | Panel Industrial (cota de demanda activa) |
-| **Z*** | **27,920 ₡ miles** | Margen semanal máximo |
-
-**Cuellos de botella:** Horas de Ensamble (π = ₡14 mil/hr) y Horas de Calidad (π = ₡100 mil/hr).
-
-
----
-
-## Estructura del proyecto
+## Como correr localmente
 
 ```
-tarea3_paneles_solares/
-├── app.py            ← Interfaz Streamlit
-├── modelo.py         ← Modelo LP con PuLP
-├── requirements.txt  ← Dependencias
-└── README.md         ← Este archivo
-```
-
----
-
-## Cómo ejecutar localmente
-
-```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
-
----
-
-## Deploy en Streamlit Cloud
-
-1. Subir este repositorio a GitHub (público).
-2. Ir a [share.streamlit.io](https://share.streamlit.io) → conectar con GitHub.
-3. Seleccionar este repo, rama `main`, archivo `app.py`.
-4. Presionar **Deploy** — la URL pública estará lista en ~2 minutos.
-
----
-
-## Interpretación gerencial
-
-El modelo recomienda producir **96 paneles residenciales, 38 comerciales y 30 industriales** para alcanzar el margen máximo de ₡27,920 miles/semana.
-
-Los recursos más escasos son las **horas de calidad** (precio sombra ₡100 mil/hr) y las **horas de ensamble** (₡14 mil/hr). Ampliar el personal de control de calidad es la inversión con mayor retorno marginal antes de cualquier otra decisión de capacidad.
-
----
-
-*Curso II-1122 · Semanas 5-6 · Simplex Avanzado y Software Industrial*

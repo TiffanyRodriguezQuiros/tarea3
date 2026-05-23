@@ -1,63 +1,109 @@
-from pulp import (
-    LpProblem, LpMaximize, LpVariable, LpStatus,
-    PULP_CBC_CMD, value
-)
+from pulp import LpProblem, LpMaximize, LpVariable, LpStatus, PULP_CBC_CMD, value
 
 
-def resolver_paneles(
-    margen_r: float,
-    margen_c: float,
-    margen_i: float,
-    cap_silicio: float,
-    cap_ensamble: float,
-    cap_calidad: float,
-    dem_res: float,
-    dem_com: float,
-    dem_ind: float,
-) -> dict:
-    """
-    Modelo LP: mix de producción semanal de paneles solares.
+# Datos de las 3 casas (basados en facturas CNFL)
+# Casa 1: Heredia, 86 kWh/mes - dato real de factura
+# Casa 2: San Jose, 152 kWh/mes - factura ficticia
+# Casa 3: Alajuela, 218 kWh/mes - factura ficticia
 
-    Variables de decision:
-        x1 = unidades de Panel Residencial (100 W)
-        x2 = unidades de Panel Comercial   (300 W)
-        x3 = unidades de Panel Industrial  (500 W)
+# Un panel solar de 300W genera aprox:
+# Heredia (zona nublada):  3.5 h sol/dia x 0.3 kW x 30 dias = 31.5 kWh/mes por panel
+# San Jose (zona urbana):  4.0 h sol/dia x 0.3 kW x 30 dias = 36.0 kWh/mes por panel
+# Alajuela (zona seca):    4.5 h sol/dia x 0.3 kW x 30 dias = 40.5 kWh/mes por panel
 
-    Retorna dict con x1, x2, x3, Z, status, precios_sombra.
-    """
-    m = LpProblem("PanelesSolaresCR", LpMaximize)
+# Tarifa CNFL residencial: 58.16 colones/kWh
+TARIFA = 58.16
 
-    x1 = LpVariable("Panel_Residencial", lowBound=0)
-    x2 = LpVariable("Panel_Comercial",   lowBound=0)
-    x3 = LpVariable("Panel_Industrial",  lowBound=0)
+GEN_C1 = 31.5   # kWh/mes por panel en Casa 1
+GEN_C2 = 36.0   # kWh/mes por panel en Casa 2
+GEN_C3 = 40.5   # kWh/mes por panel en Casa 3
 
-    # Función objetivo — maximizar margen de contribución (₡ miles/unidad)
-    m += margen_r * x1 + margen_c * x2 + margen_i * x3, "Margen_Total"
+AHORRO_C1 = round(GEN_C1 * TARIFA, 0)   # colones ahorrados por panel/mes
+AHORRO_C2 = round(GEN_C2 * TARIFA, 0)
+AHORRO_C3 = round(GEN_C3 * TARIFA, 0)
 
-    # Restricciones de recursos
-    m += 1.2 * x1 + 3.0 * x2 + 5.5 * x3 <= cap_silicio,  "Silicio_kg"
-    m += 2.5 * x1 + 5.0 * x2 + 9.0 * x3 <= cap_ensamble, "Ensamble_hr"
-    m += 0.5 * x1 + 1.5 * x2 + 2.5 * x3 <= cap_calidad,  "Calidad_hr"
+# Costo de instalacion por panel (incluye panel + mano de obra)
+COSTO_C1 = 165000   # mas caro por techo inclinado y acceso dificil
+COSTO_C2 = 150000
+COSTO_C3 = 145000
 
-    # Restricciones de demanda máxima
-    m += x1 <= dem_res, "Demanda_Residencial"
-    m += x2 <= dem_com, "Demanda_Comercial"
-    m += x3 <= dem_ind, "Demanda_Industrial"
+# Maximo de paneles por casa (no generar mas de lo que consume)
+MAX_C1 = 2   # 86 / 31.5 = 2.73 -> 2 paneles
+MAX_C2 = 4   # 152 / 36  = 4.22 -> 4 paneles
+MAX_C3 = 5   # 218 / 40.5 = 5.38 -> 5 paneles
+
+
+def resolver(presupuesto, max_c1, max_c2, max_c3):
+    m = LpProblem("Paneles_Solares_3_Casas", LpMaximize)
+
+    x1 = LpVariable("Casa1_Heredia",  lowBound=0)
+    x2 = LpVariable("Casa2_SanJose",  lowBound=0)
+    x3 = LpVariable("Casa3_Alajuela", lowBound=0)
+
+    # Objetivo: maximizar ahorro mensual total en colones
+    m += AHORRO_C1 * x1 + AHORRO_C2 * x2 + AHORRO_C3 * x3, "Ahorro_Total"
+
+    # Restriccion de presupuesto
+    m += COSTO_C1 * x1 + COSTO_C2 * x2 + COSTO_C3 * x3 <= presupuesto, "Presupuesto"
+
+    # No generar mas energia de la que consume cada casa
+    m += x1 <= max_c1, "Max_Casa1"
+    m += x2 <= max_c2, "Max_Casa2"
+    m += x3 <= max_c3, "Max_Casa3"
 
     m.solve(PULP_CBC_CMD(msg=0))
 
     precios_sombra = {}
     holguras = {}
-    for name, constr in m.constraints.items():
-        precios_sombra[name] = constr.pi if constr.pi is not None else 0.0
-        holguras[name] = constr.slack if constr.slack is not None else 0.0
+    for nombre, restriccion in m.constraints.items():
+        precios_sombra[nombre] = restriccion.pi if restriccion.pi is not None else 0.0
+        holguras[nombre] = restriccion.slack if restriccion.slack is not None else 0.0
+
+    x1v = round(x1.varValue or 0, 2)
+    x2v = round(x2.varValue or 0, 2)
+    x3v = round(x3.varValue or 0, 2)
+
+    costo_invertido = COSTO_C1 * x1v + COSTO_C2 * x2v + COSTO_C3 * x3v
+    ahorro_mensual  = round(value(m.objective) or 0, 0)
+    meses_payback   = round(costo_invertido / ahorro_mensual, 1) if ahorro_mensual > 0 else 0
 
     return {
-        "x1": round(x1.varValue or 0, 2),
-        "x2": round(x2.varValue or 0, 2),
-        "x3": round(x3.varValue or 0, 2),
-        "Z":  round(value(m.objective) or 0, 2),
+        "x1": x1v,
+        "x2": x2v,
+        "x3": x3v,
+        "ahorro_mensual": ahorro_mensual,
+        "costo_invertido": round(costo_invertido, 0),
+        "meses_payback": meses_payback,
         "status": LpStatus[m.status],
         "precios_sombra": precios_sombra,
         "holguras": holguras,
     }
+
+
+# Datos de las casas para mostrar en la app
+CASAS = {
+    "Casa 1 - Heredia": {
+        "consumo": 86,
+        "factura": 5465,
+        "gen_panel": GEN_C1,
+        "ahorro_panel": AHORRO_C1,
+        "costo_panel": COSTO_C1,
+        "max_paneles": MAX_C1,
+    },
+    "Casa 2 - San Jose": {
+        "consumo": 152,
+        "factura": 9240,
+        "gen_panel": GEN_C2,
+        "ahorro_panel": AHORRO_C2,
+        "costo_panel": COSTO_C2,
+        "max_paneles": MAX_C2,
+    },
+    "Casa 3 - Alajuela": {
+        "consumo": 218,
+        "factura": 13180,
+        "gen_panel": GEN_C3,
+        "ahorro_panel": AHORRO_C3,
+        "costo_panel": COSTO_C3,
+        "max_paneles": MAX_C3,
+    },
+}

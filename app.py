@@ -1,202 +1,251 @@
 import streamlit as st
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import pandas as pd
-from modelo import resolver_paneles
+from modelo import resolver, CASAS, AHORRO_C1, AHORRO_C2, AHORRO_C3
+from modelo import COSTO_C1, COSTO_C2, COSTO_C3, MAX_C1, MAX_C2, MAX_C3
 
-st.set_page_config(
-    page_title="Paneles Solares CR — Solver LP",
-    page_icon="☀️",
-    layout="wide",
-)
+st.set_page_config(page_title="Paneles Solares - Tarea 3", layout="wide")
 
-# ── Encabezado ────────────────────────────────────────────────────────────────
-st.title("☀️ Optimización de Producción — Paneles Solares CR")
-st.caption("II-1122 · Modelos de Optimización Industrial · UCR Alajuela · Tarea 3")
-
-st.markdown(
-    """
-**Empresa:** Paneles Solares CR S.A.
-**Decisión:** Mix de producción semanal de tres tipos de panel solar
-**Objetivo:** Maximizar el margen de contribución total (₡ miles/semana)
-"""
-)
+st.title("Optimizacion de Paneles Solares - 3 Casas (CNFL)")
+st.write("II-1122 | Modelos de Optimizacion Industrial | UCR Alajuela | Tarea 3")
 
 st.divider()
 
-# ── Sidebar: parámetros editables ─────────────────────────────────────────────
-with st.sidebar:
-    st.header("⚙️ Parámetros del modelo")
+# Seccion 1: datos de las 3 casas
+st.subheader("Datos de las 3 casas (facturas CNFL)")
+st.write(
+    "Se compararon 3 facturas residenciales de CNFL. "
+    "El modelo decide cuantos paneles solares instalar en cada casa para maximizar el ahorro mensual total."
+)
 
-    st.subheader("Margen de contribución (₡ miles/unidad)")
-    margen_r = st.number_input("Panel Residencial (100 W)", value=85.0, min_value=0.0, step=5.0)
-    margen_c = st.number_input("Panel Comercial (300 W)",   value=220.0, min_value=0.0, step=10.0)
-    margen_i = st.number_input("Panel Industrial (500 W)",  value=380.0, min_value=0.0, step=10.0)
+col1, col2, col3 = st.columns(3)
+with col1:
+    st.markdown("**Casa 1 - Heredia**")
+    st.write("Consumo: 86 kWh/mes")
+    st.write("Factura actual: 5,465 colones")
+    st.write("Irradiacion: 3.5 h sol/dia")
+    st.write("Generacion por panel: 31.5 kWh/mes")
+    st.write("Costo por panel: 165,000 colones")
+with col2:
+    st.markdown("**Casa 2 - San Jose**")
+    st.write("Consumo: 152 kWh/mes")
+    st.write("Factura actual: 9,240 colones")
+    st.write("Irradiacion: 4.0 h sol/dia")
+    st.write("Generacion por panel: 36.0 kWh/mes")
+    st.write("Costo por panel: 150,000 colones")
+with col3:
+    st.markdown("**Casa 3 - Alajuela**")
+    st.write("Consumo: 218 kWh/mes")
+    st.write("Factura actual: 13,180 colones")
+    st.write("Irradiacion: 4.5 h sol/dia")
+    st.write("Generacion por panel: 40.5 kWh/mes")
+    st.write("Costo por panel: 145,000 colones")
 
-    st.subheader("Capacidad semanal de recursos")
-    cap_silicio  = st.slider("Silicio disponible (kg)",       100, 1000, 480, step=10)
-    cap_ensamble = st.slider("Horas de ensamble",             100, 1200, 700, step=20)
-    cap_calidad  = st.slider("Horas de control de calidad",    50,  400, 180, step=10)
+st.divider()
 
-    st.subheader("Demanda máxima (unidades/semana)")
-    dem_res = st.number_input("Demanda Residencial", value=150, min_value=0, step=10)
-    dem_com = st.number_input("Demanda Comercial",   value=80,  min_value=0, step=5)
-    dem_ind = st.number_input("Demanda Industrial",  value=30,  min_value=0, step=5)
-
-    optimizar = st.button("🔍 Optimizar", type="primary", use_container_width=True)
-
-# ── Modelo LP — descripción ────────────────────────────────────────────────────
-with st.expander("📐 Ver modelo LP completo"):
+# Seccion 2: modelo LP
+with st.expander("Ver modelo de programacion lineal"):
     st.markdown(
-        f"""
-**Variables de decisión:**
-- x₁ = unidades de Panel Residencial (100 W)
-- x₂ = unidades de Panel Comercial (300 W)
-- x₃ = unidades de Panel Industrial (500 W)
+        """
+**Variables de decision:**
+- x1 = numero de paneles en Casa 1 (Heredia)
+- x2 = numero de paneles en Casa 2 (San Jose)
+- x3 = numero de paneles en Casa 3 (Alajuela)
 
-**Función objetivo:**
+**Funcion objetivo:**
 
-$$\\max Z = {margen_r}x_1 + {margen_c}x_2 + {margen_i}x_3$$
+Maximizar Z = 1832*x1 + 2094*x2 + 2355*x3 (colones ahorrados por mes)
 
 **Restricciones:**
 
-| Restricción | Coeficientes | Límite |
-|---|---|---|
-| Silicio (kg) | 1.2 x₁ + 3.0 x₂ + 5.5 x₃ | ≤ {cap_silicio} |
-| Ensamble (hr) | 2.5 x₁ + 5.0 x₂ + 9.0 x₃ | ≤ {cap_ensamble} |
-| Calidad (hr) | 0.5 x₁ + 1.5 x₂ + 2.5 x₃ | ≤ {cap_calidad} |
-| Demanda residencial | x₁ | ≤ {dem_res} |
-| Demanda comercial | x₂ | ≤ {dem_com} |
-| Demanda industrial | x₃ | ≤ {dem_ind} |
-| No negatividad | x₁, x₂, x₃ | ≥ 0 |
-"""
+- Presupuesto: 165000*x1 + 150000*x2 + 145000*x3 <= presupuesto
+- Limite Casa 1: x1 <= 2 (no generar mas de lo que consume)
+- Limite Casa 2: x2 <= 4
+- Limite Casa 3: x3 <= 5
+- No negatividad: x1, x2, x3 >= 0
+        """
     )
 
-# ── Resultados ────────────────────────────────────────────────────────────────
+st.divider()
+
+# Seccion 3: parametros editables
+st.subheader("Parametros del modelo")
+
+col_a, col_b = st.columns(2)
+with col_a:
+    presupuesto = st.slider(
+        "Presupuesto disponible para instalacion (colones)",
+        min_value=300000,
+        max_value=2000000,
+        value=1500000,
+        step=50000,
+        format="%d",
+    )
+with col_b:
+    st.write("")
+    st.write("")
+    st.info(
+        f"Costo maximo posible si se instalan todos los paneles: "
+        f"{COSTO_C1*MAX_C1 + COSTO_C2*MAX_C2 + COSTO_C3*MAX_C3:,} colones"
+    )
+
+st.write("Maximo de paneles por casa (ajustable):")
+colx, coly, colz = st.columns(3)
+with colx:
+    max1 = st.number_input("Max paneles Casa 1", min_value=0, max_value=10, value=MAX_C1)
+with coly:
+    max2 = st.number_input("Max paneles Casa 2", min_value=0, max_value=10, value=MAX_C2)
+with colz:
+    max3 = st.number_input("Max paneles Casa 3", min_value=0, max_value=10, value=MAX_C3)
+
+optimizar = st.button("Resolver modelo", type="primary")
+
+st.divider()
+
+# Seccion 4: resultados
 if optimizar:
-    res = resolver_paneles(
-        margen_r, margen_c, margen_i,
-        cap_silicio, cap_ensamble, cap_calidad,
-        dem_res, dem_com, dem_ind,
-    )
+    res = resolver(presupuesto, max1, max2, max3)
 
-    estado = res["status"]
-    color_estado = "🟢" if estado == "Optimal" else "🔴"
-    st.markdown(f"### {color_estado} Estado del solver: **{estado}**")
-
-    if estado != "Optimal":
-        st.error("El modelo no tiene solución óptima. Revise los parámetros.")
+    if res["status"] != "Optimal":
+        st.error(f"El modelo no encontro solucion optima. Estado: {res['status']}")
         st.stop()
 
-    # KPIs principales
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Panel Residencial (x₁)", f"{res['x1']:.0f} und")
-    col2.metric("Panel Comercial (x₂)",   f"{res['x2']:.0f} und")
-    col3.metric("Panel Industrial (x₃)",  f"{res['x3']:.0f} und")
-    col4.metric("Z* — Margen Total",       f"₡{res['Z']:,.1f} miles")
+    st.subheader("Solucion optima")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Paneles Casa 1 (Heredia)",  f"{res['x1']:.0f} paneles")
+    m2.metric("Paneles Casa 2 (San Jose)", f"{res['x2']:.0f} paneles")
+    m3.metric("Paneles Casa 3 (Alajuela)", f"{res['x3']:.0f} paneles")
+    m4.metric("Ahorro mensual total",      f"{res['ahorro_mensual']:,.0f} colones")
+
+    st.write(
+        f"Costo total de instalacion: **{res['costo_invertido']:,.0f} colones** | "
+        f"Tiempo de recuperacion: **{res['meses_payback']} meses** "
+        f"({round(res['meses_payback']/12, 1)} años)"
+    )
 
     st.divider()
 
-    # Gráficos
-    col_a, col_b = st.columns(2)
+    # Graficos
+    col_g1, col_g2 = st.columns(2)
 
-    with col_a:
-        st.subheader("Producción óptima por tipo de panel")
+    with col_g1:
+        st.write("**Paneles instalados por casa**")
         fig1, ax1 = plt.subplots(figsize=(5, 3.5))
-        tipos  = ["Residencial\n(x₁)", "Comercial\n(x₂)", "Industrial\n(x₃)"]
-        valores = [res["x1"], res["x2"], res["x3"]]
-        colores = ["#1E88E5", "#FDD835", "#43A047"]
-        bars = ax1.bar(tipos, valores, color=colores, width=0.5)
-        for bar, val in zip(bars, valores):
-            ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
-                     f"{val:.0f}", ha="center", va="bottom", fontweight="bold")
-        ax1.set_ylabel("Unidades / semana")
-        ax1.set_ylim(0, max(valores) * 1.2 + 5)
+        casas_nombres = ["Casa 1\nHeredia", "Casa 2\nSan Jose", "Casa 3\nAlajuela"]
+        paneles = [res["x1"], res["x2"], res["x3"]]
+        maximos = [max1, max2, max3]
+        colores = ["#1565C0", "#2E7D32", "#E65100"]
+        bars = ax1.bar(casas_nombres, paneles, color=colores, width=0.5)
+        ax1.bar(casas_nombres, maximos, color="lightgrey", width=0.5, zorder=0, label="Max posible")
+        ax1.bar(casas_nombres, paneles, color=colores, width=0.5, zorder=1, label="Paneles optimos")
+        for bar, val in zip(bars, paneles):
+            if val > 0:
+                ax1.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.05,
+                    f"{val:.0f}",
+                    ha="center",
+                    fontweight="bold",
+                )
+        ax1.set_ylabel("Numero de paneles")
+        ax1.set_ylim(0, max(maximos) + 1)
+        ax1.legend(fontsize=8)
         ax1.spines[["top", "right"]].set_visible(False)
         st.pyplot(fig1)
 
-    with col_b:
-        st.subheader("Uso de recursos vs. capacidad")
-        x1v, x2v, x3v = res["x1"], res["x2"], res["x3"]
-        uso_sil = 1.2 * x1v + 3.0 * x2v + 5.5 * x3v
-        uso_ens = 2.5 * x1v + 5.0 * x2v + 9.0 * x3v
-        uso_cal = 0.5 * x1v + 1.5 * x2v + 2.5 * x3v
-        recursos = ["Silicio", "Ensamble", "Calidad"]
-        uso      = [uso_sil, uso_ens, uso_cal]
-        cap      = [cap_silicio, cap_ensamble, cap_calidad]
-        pct      = [u / c * 100 for u, c in zip(uso, cap)]
-
+    with col_g2:
+        st.write("**Ahorro mensual por casa (colones)**")
         fig2, ax2 = plt.subplots(figsize=(5, 3.5))
-        y_pos = range(len(recursos))
-        ax2.barh(y_pos, cap,  color="#E0E0E0", label="Capacidad")
-        ax2.barh(y_pos, uso,  color=["#E53935" if p > 99 else "#1E88E5" for p in pct], label="Uso")
-        ax2.set_yticks(list(y_pos))
-        ax2.set_yticklabels(recursos)
-        for i, (u, p) in enumerate(zip(uso, pct)):
-            ax2.text(u + 2, i, f"{p:.0f}%", va="center", fontsize=9)
+        ahorros = [
+            AHORRO_C1 * res["x1"],
+            AHORRO_C2 * res["x2"],
+            AHORRO_C3 * res["x3"],
+        ]
+        colores2 = ["#1565C0", "#2E7D32", "#E65100"]
+        bars2 = ax2.bar(casas_nombres, ahorros, color=colores2, width=0.5)
+        for bar, val in zip(bars2, ahorros):
+            if val > 0:
+                ax2.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 30,
+                    f"{val:,.0f}",
+                    ha="center",
+                    fontsize=9,
+                )
+        ax2.set_ylabel("Ahorro mensual (colones)")
         ax2.spines[["top", "right"]].set_visible(False)
-        ax2.legend(loc="lower right", fontsize=8)
         st.pyplot(fig2)
 
     st.divider()
 
-    # Precios sombra
-    st.subheader("📊 Análisis de sensibilidad — Precios sombra")
-    labels_ps = {
-        "Silicio_kg":            "Silicio (kg)",
-        "Ensamble_hr":           "Ensamble (hr)",
-        "Calidad_hr":            "Calidad (hr)",
-        "Demanda_Residencial":   "Demanda Residencial",
-        "Demanda_Comercial":     "Demanda Comercial",
-        "Demanda_Industrial":    "Demanda Industrial",
+    # Tabla de precios sombra
+    st.subheader("Precios sombra (analisis de sensibilidad)")
+    st.write(
+        "El precio sombra indica cuanto aumentaria el ahorro mensual "
+        "si se relajara esa restriccion en una unidad."
+    )
+
+    nombres_restricciones = {
+        "Presupuesto": "Presupuesto (colones)",
+        "Max_Casa1":   "Limite max paneles Casa 1",
+        "Max_Casa2":   "Limite max paneles Casa 2",
+        "Max_Casa3":   "Limite max paneles Casa 3",
     }
-    ps_data = []
-    for key, label in labels_ps.items():
-        pi     = res["precios_sombra"].get(key, 0)
-        holgura = res["holguras"].get(key, 0)
-        ps_data.append({
-            "Restricción":    label,
-            "Precio sombra (₡ miles)": round(pi, 4),
-            "Holgura (unidad recurso)": round(holgura, 2),
-            "¿Cuello de botella?": "🔴 Sí" if abs(holgura) < 0.01 else "🟢 No",
+
+    filas = []
+    for clave, nombre in nombres_restricciones.items():
+        pi  = res["precios_sombra"].get(clave, 0)
+        hol = res["holguras"].get(clave, 0)
+        filas.append({
+            "Restriccion":         nombre,
+            "Precio sombra":       round(pi, 4),
+            "Holgura":             round(hol, 2),
+            "Es cuello de botella": "Si" if abs(hol) < 0.01 else "No",
         })
-    df_ps = pd.DataFrame(ps_data)
-    st.dataframe(df_ps, use_container_width=True, hide_index=True)
+
+    df = pd.DataFrame(filas)
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
     st.divider()
 
-    # Interpretación gerencial
-    st.subheader("🧑‍💼 Interpretación gerencial")
+    # Interpretacion
+    st.subheader("Interpretacion de resultados")
 
-    cuello = [r["Restricción"] for r in ps_data if "Sí" in r["¿Cuello de botella?"]]
-    cuello_str = ", ".join(cuello) if cuello else "ninguno"
+    cuellos = [f["Restriccion"] for f in filas if f["Es cuello de botella"] == "Si"]
+    factura_antes = 5465 + 9240 + 13180
+    factura_despues = factura_antes - res["ahorro_mensual"]
 
-    margen_total = res["Z"]
-    st.success(
-        f"**Recomendación de producción semanal óptima:**  \n"
-        f"Producir **{res['x1']:.0f}** paneles residenciales, "
-        f"**{res['x2']:.0f}** paneles comerciales y "
-        f"**{res['x3']:.0f}** paneles industriales genera un **margen de contribución "
-        f"de ₡{margen_total:,.1f} miles** por semana."
+    x1_real = int(res["x1"])
+    x2_real = int(res["x2"])
+    x3_real = int(res["x3"])
+
+    st.write(
+        f"La solucion del modelo indica instalar **{res['x1']:.2f} paneles en Casa 1 (Heredia)**, "
+        f"**{res['x2']:.0f} paneles en Casa 2 (San Jose)** y "
+        f"**{res['x3']:.0f} paneles en Casa 3 (Alajuela)**."
     )
-
-    if cuello:
-        ps_vals = {r["Restricción"]: r["Precio sombra (₡ miles)"] for r in ps_data}
-        mejor = max(cuello, key=lambda r: abs(ps_vals.get(r, 0)))
-        mejor_pi = ps_vals.get(mejor, 0)
-        st.info(
-            f"**Recurso prioritario para ampliar:** {mejor}  \n"
-            f"Cada unidad adicional de este recurso incrementa el margen en "
-            f"**₡{mejor_pi:,.2f} miles**. Se recomienda negociar mayor capacidad "
-            f"en este recurso antes de cualquier otra inversión."
+    st.write(
+        "Nota: la programacion lineal permite soluciones fraccionarias. "
+        f"En la practica, en Casa 1 se instala **{x1_real} panel** (redondeando hacia abajo). "
+        "Para forzar numeros enteros se usaria Programacion Entera Mixta (MIP), "
+        "tema de semanas posteriores del curso."
+    )
+    st.write(
+        f"El ahorro mensual estimado es de **{res['ahorro_mensual']:,.0f} colones**, "
+        f"reduciendo la factura combinada de las 3 casas de "
+        f"**{factura_antes:,}** a aproximadamente "
+        f"**{factura_despues:,.0f} colones por mes**."
+    )
+    st.write(
+        f"La inversion se recupera en aproximadamente **{res['meses_payback']} meses** "
+        f"({round(res['meses_payback']/12, 1)} anos)."
+    )
+    if cuellos:
+        st.write(
+            f"Los cuellos de botella son: **{', '.join(cuellos)}**. "
+            f"Si se aumenta el presupuesto o el limite de paneles por casa, el ahorro mejora."
         )
-    else:
-        st.info("Ningún recurso está completamente agotado. Existen holguras en todos los cuellos de botella.")
-
-    st.markdown(
-        f"> **Cuello(s) de botella identificado(s):** {cuello_str}  \n"
-        f"> Los recursos con precio sombra > 0 son los que limitan la rentabilidad."
-    )
 
 else:
-    st.info("Ajusta los parámetros en el panel izquierdo y presiona **Optimizar**.")
+    st.info("Ajuste los parametros y presione 'Resolver modelo' para ver la solucion optima.")
